@@ -115,16 +115,25 @@ def run_training(
     exp_name
   )
   print('model dir:', model_dir)
-  if tf.io.gfile.exists(model_dir):
+  # @SHAIN
+  #if tf.io.gfile.exists(model_dir):
+  if os.path.exists(model_dir):
     print('model dir already exists: {}'.format(model_dir))
     if input('continue training? [y/n] ') != 'y':
       print('aborting')
       return
+  # @SHAIN:
+  else:
+    os.makedirs(model_dir)
 
   # Save kwargs in json format
+  # @SHAIN EDITED
   if dump_kwargs is not None:
-    with tf.io.gfile.GFile(os.path.join(model_dir, 'kwargs.json'), 'w') as f:
+    with open(os.path.join(model_dir, 'kwargs.json'), 'w') as f:
       f.write(json.dumps(dump_kwargs, indent=2, sort_keys=True) + '\n')
+    # @SHAIN COMMENTED NEXT LINES USED FOR gs: FILESYSTEM
+    #  with tf.io.gfile.GFile(os.path.join(model_dir, 'kwargs.json'), 'w') as f:
+    #  f.write(json.dumps(dump_kwargs, indent=2, sort_keys=True) + '\n')
 
   # model_fn for TPUEstimator
   def model_fn(features, params, mode):
@@ -180,26 +189,36 @@ def run_training(
       mode=mode, host_call=tpu_summary.get_host_call(), loss=loss, train_op=train_op)
 
   # Set up Estimator and train
+  # @SHAIN REIMPLEMENTED IT TO RUN ON GPU CLUSTER. TPU ESTIMATOR CAN BE USED ALSO FOR THIS PURPOSE
   print("warm_start_from:", warm_start_from)
-  estimator = tf.estimator.tpu.TPUEstimator(
+  estimator = tf.estimator.Estimator(
     model_fn=model_fn,
-    use_tpu=True,
-    train_batch_size=total_bs,
-    eval_batch_size=total_bs,
-    config=tf.estimator.tpu.RunConfig(
-      cluster=tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu, zone=zone, project=project),
-      model_dir=model_dir,
-      session_config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True),
-      tpu_config=tf.estimator.tpu.TPUConfig(
-        iterations_per_loop=iterations_per_loop,
-        num_shards=None,
-        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig.PER_HOST_V2
-      ),
-      save_checkpoints_secs=1600,  # 30 minutes
-      keep_checkpoint_max=keep_checkpoint_max
+    config=tf.estimator.RunConfig(
+      train_distribute=tf.distribute.MirroredStrategy(devices=['/GPU:0'])
     ),
-    warm_start_from=warm_start_from
+    model_dir=model_dir,
+    warm_start_from=warm_start_from,
   )
+  # estimator = tf.estimator.Estimator(
+  #   model_fn=model_fn,
+  #   use_tpu=False,
+  #   train_batch_size=total_bs,
+  #   eval_batch_size=total_bs,
+  #   config=tf.estimator.tpu.RunConfig(
+  #     #cluster=tf.distribute.cluster_resolver.TPUClusterResolver(tpu='local', zone='', project=''),
+  #     cluster=tf.distribute.cluster_resolver.TFConfigClusterResolver()
+  #     model_dir=model_dir,
+  #     session_config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True),
+  #     tpu_config=tf.estimator.tpu.TPUConfig(
+  #       iterations_per_loop=iterations_per_loop,
+  #       num_shards=None,
+  #       per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig.PER_HOST_V2
+  #     ),
+  #     save_checkpoints_secs=1600,  # 30 minutes
+  #     keep_checkpoint_max=keep_checkpoint_max
+  #   ),
+  #   warm_start_from=warm_start_from
+  # )
   estimator.train(input_fn=train_input_fn, max_steps=max_steps)
 
 

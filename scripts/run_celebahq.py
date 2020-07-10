@@ -11,11 +11,14 @@ import fire
 import numpy as np
 import tensorflow.compat.v1 as tf
 
+import os
+
 from diffusion_tf import utils
 from diffusion_tf.diffusion_utils import get_beta_schedule, GaussianDiffusion
 from diffusion_tf.models import unet
 from diffusion_tf.tpu_utils import tpu_utils, datasets
 
+os.environ['NVIDIA_VISIBLE_DEVICES'] = '0'
 
 class Model(tpu_utils.Model):
   def __init__(self, *, model_name, betas: np.ndarray, loss_type: str, num_classes: int,
@@ -136,9 +139,12 @@ def train(
     dropout=0.0, randflip=1, block_size=1,
     tfds_data_dir='tensorflow_datasets', log_dir='logs'
 ):
-  region = utils.get_gcp_region()
-  tfds_data_dir = 'gs://{}-{}/{}'.format(bucket_name_prefix, region, tfds_data_dir)
-  log_dir = 'gs://{}-{}/{}'.format(bucket_name_prefix, region, log_dir)
+  # @ SHAIN COMMENTED NEXT LINES TO DISABLE GOOGLE CLOUD CONNECTION
+  # region = utils.get_gcp_region()
+  tfds_data_dir = '/datasets'
+  # tfds_data_dir = 'gs://{}-{}/{}'.format(bucket_name_prefix, region, tfds_data_dir)
+  # log_dir = 'gs://{}-{}/{}'.format(bucket_name_prefix, region, log_dir)
+  log_dir = '/logs'
   kwargs = dict(locals())
   ds = datasets.get_dataset(dataset, tfds_data_dir=tfds_data_dir)
   tpu_utils.run_training(
